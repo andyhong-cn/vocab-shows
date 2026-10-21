@@ -35,7 +35,7 @@ begin
   if not public.valid_nick(nick) then
     return jsonb_build_object('error', 'nick');
   end if;
-  if p_pin is null or p_pin !~ '^[0-9]{4}$' then
+  if p_pin is null or char_length(p_pin) < 4 or char_length(p_pin) > 64 or p_pin ~ '[[:space:]]' then
     return jsonb_build_object('error', 'pin');
   end if;
   select * into row from public.learner_progress where nickname = nick;
@@ -81,7 +81,7 @@ begin
   if not public.valid_nick(nick) then
     return jsonb_build_object('error', 'nick');
   end if;
-  if p_pin is null or p_pin !~ '^[0-9]{4}$' then
+  if p_pin is null or char_length(p_pin) < 4 or char_length(p_pin) > 64 or p_pin ~ '[[:space:]]' then
     return jsonb_build_object('error', 'pin');
   end if;
   if p_payload is null or jsonb_typeof(p_payload) <> 'object' then

@@ -217,6 +217,76 @@ begin
   result := jsonb_set(result, '{statuses}', merged_statuses, true);
   result := jsonb_set(result, '{shows}', merged_shows, true);
 
+  declare
+    incoming_score jsonb := coalesce(p_payload -> 'score', '{}'::jsonb);
+    remote_score jsonb := coalesce(row.payload -> 'score', '{}'::jsonb);
+    incoming_score_at bigint := 0;
+    remote_score_at bigint := 0;
+  begin
+    if jsonb_typeof(incoming_score) <> 'object' then
+      incoming_score := '{}'::jsonb;
+    end if;
+    if jsonb_typeof(remote_score) <> 'object' then
+      remote_score := '{}'::jsonb;
+    end if;
+    begin
+      incoming_score_at := coalesce((incoming_score ->> 'updatedAt')::bigint, 0);
+    exception
+      when others then
+        incoming_score_at := 0;
+    end;
+    begin
+      remote_score_at := coalesce((remote_score ->> 'updatedAt')::bigint, 0);
+    exception
+      when others then
+        remote_score_at := 0;
+    end;
+    if incoming_score_at > 0 or remote_score_at > 0 then
+      if incoming_score_at >= remote_score_at then
+        result := jsonb_set(result, '{score}', incoming_score, true);
+      else
+        result := jsonb_set(result, '{score}', remote_score, true);
+      end if;
+    end if;
+  end;
+
+  declare
+    incoming_place jsonb := p_payload -> 'placement';
+    remote_place jsonb := row.payload -> 'placement';
+    incoming_place_at bigint := 0;
+    remote_place_at bigint := 0;
+  begin
+    if incoming_place is null or jsonb_typeof(incoming_place) <> 'object' or coalesce(incoming_place ->> 'done', '') is distinct from 'true' then
+      incoming_place := null;
+    end if;
+    if remote_place is null or jsonb_typeof(remote_place) <> 'object' or coalesce(remote_place ->> 'done', '') is distinct from 'true' then
+      remote_place := null;
+    end if;
+    begin
+      incoming_place_at := coalesce((incoming_place ->> 'updatedAt')::bigint, 0);
+    exception
+      when others then
+        incoming_place_at := 0;
+    end;
+    begin
+      remote_place_at := coalesce((remote_place ->> 'updatedAt')::bigint, 0);
+    exception
+      when others then
+        remote_place_at := 0;
+    end;
+    if incoming_place is null and remote_place is not null then
+      result := jsonb_set(result, '{placement}', remote_place, true);
+    elsif incoming_place is not null and remote_place is null then
+      result := jsonb_set(result, '{placement}', incoming_place, true);
+    elsif incoming_place is not null and remote_place is not null then
+      if incoming_place_at >= remote_place_at then
+        result := jsonb_set(result, '{placement}', incoming_place, true);
+      else
+        result := jsonb_set(result, '{placement}', remote_place, true);
+      end if;
+    end if;
+  end;
+
   update public.learner_progress
   set payload = result, updated_at = now()
   where nickname = nick;

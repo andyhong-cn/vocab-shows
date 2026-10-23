@@ -278,13 +278,29 @@
   .study-fit .tip { font-size: calc(0.76rem * var(--card-fit)); margin-top: calc(8px * var(--card-fit)); line-height: 1.4; }
   .study-fit .gloss-label { font-size: calc(0.7rem * var(--card-fit)); }
   .study-fit .card-top { font-size: calc(0.82rem * var(--card-fit)); }
-  .study-fit button.say-btn { min-height: 36px; margin-top: 2px; padding: 4px 8px; }
-  .avatar-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+  .study-fit .card.senses-scroll {
+    max-height: 100%;
+    overflow: hidden;
+  }
+  .study-fit .card.senses-scroll ol.senses {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .avatar-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+    align-content: start;
+  }
   button.avatar-pick {
     min-width: 0;
+    min-height: 84px;
+    flex-shrink: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: flex-start;
     gap: 4px;
     padding: 8px 4px;
     background: var(--card);
@@ -293,8 +309,19 @@
     box-shadow: 0 3px 0 var(--shadow);
   }
   button.avatar-pick.is-on { border-color: var(--accent); background: var(--example); }
-  button.avatar-pick .avatar { width: 52px; height: 52px; }
-  .avatar-label { font-size: 0.72rem; line-height: 1.2; text-align: center; overflow-wrap: anywhere; }
+  button.avatar-pick .avatar { width: 52px; height: 52px; min-width: 52px; min-height: 52px; flex: none; }
+  .avatar-label {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    font-size: 0.72rem;
+    line-height: 1.2;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .text-link { margin: 0 0 12px; }
   .daily-card { margin: 0 0 12px; }
   .daily-card .wide { margin-top: 0; }
@@ -574,9 +601,71 @@
     .board-peek-note { font-size: 0.74rem; }
     .board-row { gap: 8px; padding: 8px; }
     .board-row .avatar { width: 40px; height: 40px; }
-    .study-fit .word { font-size: calc(1.35rem * var(--card-fit)); }
+    .study-fit .word { font-size: calc(1.75rem * var(--card-fit)); }
+    .study-fit .ipa { font-size: 1.05rem; margin-top: 2px; }
+    .study-fit .meta { margin-top: 2px; }
+    .study-fit .zh { margin-top: 4px; }
+    .study-fit ol.senses,
+    .study-fit .example { font-size: 1rem; }
+    .study-fit .example { margin-top: 4px; padding: 4px 8px; }
+    .study-fit .card { padding: 6px 10px; }
+    .study-fit .tip { margin-top: 4px; }
     .profile-head .avatar { width: 52px; height: 52px; }
     .profile-name { font-size: 1.15rem; }
+  }
+  @media (max-width: 389px) and (max-height: 700px) {
+    .wrap[data-layer="study"] .sheet {
+      display: grid;
+      grid-template-columns: minmax(4.5rem, 0.34fr) minmax(0, 1fr);
+      gap: var(--stack);
+      align-items: stretch;
+    }
+    .wrap[data-layer="study"] button.words-entry,
+    .wrap[data-layer="study"] .choice { margin: 0; }
+    .study-fit .word,
+    .study-fit button.say-btn { margin-top: 0; }
+    .study-fit .card { padding: 4px 8px; }
+    .study-fit .example,
+    .study-fit .zh,
+    .study-fit ol.senses li { line-height: 1.3; }
+    .study-fit .example .ex-zh { margin-top: 2px; }
+    .wrap[data-layer="study"] .confirm-dock .now { margin: 0; }
+  }
+  @media (max-height: 700px) {
+    .wrap[data-layer="account"] .topbar {
+      margin-bottom: 4px;
+      padding-top: 4px;
+      padding-bottom: 4px;
+    }
+    .wrap[data-layer="account"] .brand-stage { margin: 0; }
+    .wrap[data-layer="account"] .mascots {
+      min-height: 0;
+      gap: 6px;
+      margin: 0;
+    }
+    .wrap[data-layer="account"] .mascot,
+    .wrap[data-layer="account"] .mascot:nth-child(2),
+    .wrap[data-layer="account"] .mascot:nth-child(3),
+    .wrap[data-layer="account"] .mascot:nth-child(4) {
+      width: 28px;
+      height: 28px;
+    }
+    .wrap[data-layer="account"] .brand {
+      font-size: 1.35rem;
+      line-height: 1.15;
+      letter-spacing: 0.04em;
+      margin: 2px 0 0;
+    }
+    .wrap[data-layer="account"] .brand-en {
+      font-size: 0.78rem;
+      line-height: 1.2;
+      margin: 0;
+    }
+    .wrap[data-layer="account"] .avatar-grid { margin-top: 0; }
+    .wrap[data-layer="account"] .pane {
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
   }
   @media (min-width: 420px) {
     .wrap { padding-left: max(22px, env(safe-area-inset-left)); padding-right: max(22px, env(safe-area-inset-right)); }
@@ -611,7 +700,7 @@
 </head>
 <body>
 <main id="app"></main>
-<p class="copy-mark">© Hong Shijie · v1.1</p>
+<p class="copy-mark">© Hong Shijie · v1.2</p>
 <footer>
   <p id="sync-note"></p>
 </footer>
@@ -840,6 +929,7 @@
       scoreDue: [],
       scoreRound: 0,
       scoreDay: "",
+      scoreWeek: "",
       scoreSpreadAt: 0,
       scoreUpdatedAt: 0,
       board: null,
@@ -2931,6 +3021,7 @@
       }),
       round: state.scoreRound || 0,
       day: state.scoreDay || "",
+      week: state.scoreWeek || "",
       spread: state.scoreSpreadAt || 0,
       updatedAt: state.scoreUpdatedAt || 0
     };
@@ -2942,6 +3033,7 @@
     target.scoreDue = [];
     target.scoreRound = 0;
     target.scoreDay = "";
+    target.scoreWeek = "";
     target.scoreSpreadAt = 0;
     target.scoreUpdatedAt = 0;
     if (!raw || typeof raw !== "object") return;
@@ -2969,6 +3061,7 @@
     var round = Number(raw.round);
     target.scoreRound = isFinite(round) && round > 0 ? Math.floor(round) : 0;
     target.scoreDay = /^\d{4}-\d{2}-\d{2}$/.test(raw.day || "") ? raw.day : "";
+    target.scoreWeek = validWeekId(raw.week) || weekFromDay(target.scoreDay);
     var spread = Number(raw.spread);
     target.scoreSpreadAt = isFinite(spread) && spread > 0 ? Math.floor(spread) : 0;
     var at = Number(raw.updatedAt);
@@ -2984,6 +3077,30 @@
     var month = now.getMonth() + 1;
     var date = now.getDate();
     return now.getFullYear() + "-" + (month < 10 ? "0" : "") + month + "-" + (date < 10 ? "0" : "") + date;
+  }
+
+  function localWeekId(from) {
+    var now = from || new Date();
+    var utc = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    var day = utc.getUTCDay() || 7;
+    utc.setUTCDate(utc.getUTCDate() + 4 - day);
+    var yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
+    var week = Math.ceil((((utc - yearStart) / 86400000) + 1) / 7);
+    return utc.getUTCFullYear() + "-W" + (week < 10 ? "0" : "") + week;
+  }
+
+  function validWeekId(value) {
+    var match = /^(\d{4})-W(\d{2})$/.exec(value || "");
+    if (!match) return "";
+    var week = Number(match[2]);
+    if (week < 1 || week > 53) return "";
+    return match[1] + "-W" + match[2];
+  }
+
+  function weekFromDay(day) {
+    var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day || "");
+    if (!match) return "";
+    return localWeekId(new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
   }
 
   function settleScore(hit) {
@@ -3131,11 +3248,16 @@
       ordered = true;
     }
     var today = localDay();
+    var week = localWeekId();
     var scoring = state.scoreDay !== today;
     if (scoring) {
       state.scoreDay = today;
+      state.scoreWeek = week;
       state.scoreRound = (state.scoreRound || 0) + 1;
       state.scoreSpreadAt = 0;
+      touchScore();
+    } else if (state.scoreWeek !== week) {
+      state.scoreWeek = week;
       touchScore();
     }
     var dueMap = {};
@@ -3564,7 +3686,7 @@
       line.appendChild(h("span", { class: "board-pts", text: row.points + " 分" }));
       pane.appendChild(line);
     });
-    pane.appendChild(h("p", { class: "meta", text: "第一次答对才计分。选择 1 分，填空 2 分。订正不加分。一天一轮。" }));
+    pane.appendChild(h("p", { class: "meta", text: "积分一直累加，不清空。每天第一轮计分，同一天再来不计分。同一个词只计一次。选择 1 分，填空 2 分。订正不加分。" }));
     var incoming = state.board && Array.isArray(state.board.incoming) ? state.board.incoming : [];
     var outgoing = state.board && Array.isArray(state.board.outgoing) ? state.board.outgoing : [];
     if (incoming.length) {
@@ -3875,33 +3997,56 @@
     var box = document.querySelector(".study-fit");
     var card = document.getElementById("card");
     if (!box || !card) return;
+    var word = card.querySelector(".word");
     function spare() {
       var last = card.lastElementChild;
       if (!last) return 0;
       return box.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom;
     }
+    function headPx() {
+      return word ? parseFloat(getComputedStyle(word).fontSize) : 0;
+    }
+    var narrow = window.innerWidth <= 390;
+    var minHead = narrow ? 28 : 34;
+    var maxHead = narrow ? 32 : 36;
+    card.classList.remove("senses-scroll");
+    var sensesReset = card.querySelector("ol.senses");
+    if (sensesReset) sensesReset.style.maxHeight = "";
     var fit = 1;
     var guard = 0;
     box.style.setProperty("--card-fit", "1");
-    while (spare() > 36 && fit < 1.28 && guard < 12) {
-      var word = card.querySelector(".word");
-      var px = word ? parseFloat(getComputedStyle(word).fontSize) : 0;
-      if (px >= 35) break;
+    while (headPx() + 0.4 < minHead && fit < 1.8 && guard < 24) {
+      fit = Math.round((fit + 0.04) * 100) / 100;
+      box.style.setProperty("--card-fit", String(fit));
+      guard += 1;
+    }
+    while (spare() > 36 && headPx() < maxHead - 0.4 && fit < 1.5 && guard < 36) {
       var next = Math.round((fit + 0.04) * 100) / 100;
       box.style.setProperty("--card-fit", String(next));
-      var grown = word ? parseFloat(getComputedStyle(word).fontSize) : 0;
-      if (grown > 36 || spare() < 20) {
+      if (headPx() > maxHead + 0.4) {
         box.style.setProperty("--card-fit", String(fit));
         break;
       }
       fit = next;
       guard += 1;
     }
-    while (spare() < 2 && fit > 0.42 && guard < 40) {
-      fit = Math.round((fit - 0.04) * 100) / 100;
+    while (headPx() > maxHead + 0.6 && fit > 0.75 && guard < 48) {
+      fit = Math.round((fit - 0.02) * 100) / 100;
       box.style.setProperty("--card-fit", String(fit));
       guard += 1;
     }
+    if (spare() >= 8) return;
+    var senses = card.querySelector("ol.senses");
+    if (!senses) return;
+    var example = card.querySelector(".example");
+    var tip = card.querySelector(".tip");
+    var reserve = 16;
+    if (example) reserve += example.offsetHeight + 10;
+    if (tip) reserve += tip.offsetHeight + 8;
+    var room = Math.floor(box.getBoundingClientRect().bottom - senses.getBoundingClientRect().top - reserve);
+    if (room < 44) room = 44;
+    senses.style.maxHeight = room + "px";
+    card.classList.add("senses-scroll");
   }
 
   function renderWordList() {

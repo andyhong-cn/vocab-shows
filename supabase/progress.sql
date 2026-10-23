@@ -74,6 +74,16 @@ declare
   incoming_view bigint;
   remote_view bigint;
   merged_shows jsonb;
+  chosen_show jsonb;
+  incoming_places jsonb;
+  remote_places jsonb;
+  merged_places jsonb;
+  place_key text;
+  incoming_place jsonb;
+  remote_place jsonb;
+  place_at bigint;
+  remote_place_at bigint;
+  place_index bigint;
   result jsonb;
   top_at bigint;
   remote_top bigint;
@@ -192,8 +202,66 @@ begin
       end;
     end if;
     if remote_show is null or incoming_view >= remote_view then
-      merged_shows := jsonb_set(merged_shows, array[show_id], incoming_show, true);
+      chosen_show := incoming_show;
+    else
+      chosen_show := remote_show;
     end if;
+    remote_places := '{}'::jsonb;
+    if remote_show is not null and jsonb_typeof(remote_show -> 'places') = 'object' then
+      remote_places := remote_show -> 'places';
+    end if;
+    incoming_places := '{}'::jsonb;
+    if jsonb_typeof(incoming_show -> 'places') = 'object' then
+      incoming_places := incoming_show -> 'places';
+    end if;
+    merged_places := remote_places;
+    for place_key, incoming_place in
+      select e.key, e.value from jsonb_each(incoming_places) as e
+    loop
+      if place_key !~ '^[a-z0-9]+\|(3000|cet4)\|(preview|cover|quiz)$' then
+        continue;
+      end if;
+      if jsonb_typeof(incoming_place) <> 'object' then
+        continue;
+      end if;
+      if coalesce(incoming_place ->> 'id', '') !~ '^[a-z0-9]+$' then
+        continue;
+      end if;
+      begin
+        place_at := coalesce((incoming_place ->> 'updatedAt')::bigint, 0);
+      exception
+        when others then
+          continue;
+      end;
+      begin
+        place_index := greatest(0, coalesce((incoming_place ->> 'index')::bigint, 0));
+      exception
+        when others then
+          place_index := 0;
+      end;
+      remote_place := merged_places -> place_key;
+      remote_place_at := 0;
+      if remote_place is not null then
+        begin
+          remote_place_at := coalesce((remote_place ->> 'updatedAt')::bigint, 0);
+        exception
+          when others then
+            remote_place_at := 0;
+        end;
+      end if;
+      if remote_place is null or place_at >= remote_place_at then
+        merged_places := jsonb_set(
+          merged_places,
+          array[place_key],
+          jsonb_build_object('id', incoming_place ->> 'id', 'index', place_index, 'updatedAt', place_at),
+          true
+        );
+      end if;
+    end loop;
+    if merged_places <> '{}'::jsonb then
+      chosen_show := jsonb_set(chosen_show, '{places}', merged_places, true);
+    end if;
+    merged_shows := jsonb_set(merged_shows, array[show_id], chosen_show, true);
   end loop;
 
   begin

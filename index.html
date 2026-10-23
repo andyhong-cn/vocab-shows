@@ -700,7 +700,7 @@
 </head>
 <body>
 <main id="app"></main>
-<p class="copy-mark">© Hong Shijie · v1.2</p>
+<p class="copy-mark">© Hong Shijie · v1.3</p>
 <footer>
   <p id="sync-note"></p>
 </footer>
@@ -866,7 +866,8 @@
       hits: 0,
       misses: 0,
       missedIds: [],
-      revealed: false
+      revealed: false,
+      places: {}
     };
   }
 
@@ -944,6 +945,8 @@
 
   function captureView() {
     var view = blankShowView();
+    var prev = state.showMemory[state.showId] || blankShowView();
+    view.places = prev.places || {};
     view.episodeId = state.episodeId;
     view.moduleId = state.moduleId;
     view.mode = state.mode;
@@ -1114,6 +1117,7 @@
     if (Array.isArray(data.missedIds)) {
       view.missedIds = data.missedIds.filter(function (id) { return typeof id === "string"; });
     }
+    view.places = readPlaces(data.places);
     return view;
   }
 
@@ -1290,7 +1294,8 @@
       quizPos: view.quizPos,
       hits: view.hits,
       misses: view.misses,
-      missedIds: view.missedIds
+      missedIds: view.missedIds,
+      places: readPlaces(view.places)
     };
   }
 
@@ -1326,7 +1331,8 @@
         episode: view.episodeId,
         module: view.moduleId,
         mode: view.mode,
-        viewUpdatedAt: view.viewUpdatedAt || 0
+        viewUpdatedAt: view.viewUpdatedAt || 0,
+        places: readPlaces(view.places)
       };
     });
     var active = state.showMemory[state.showId] || blankShowView();
@@ -1410,13 +1416,20 @@
     if (!isFinite(remoteAt) || remoteAt < 0) remoteAt = 0;
     remoteAt = Math.floor(remoteAt);
     var localAt = localView.viewUpdatedAt || 0;
-    if (remoteAt < localAt) return "local";
+    var mergedPlaces = mergePlaceMaps(localView.places, incoming && incoming.places);
+    var pushPlaces = placesNeedPush(localView.places, incoming && incoming.places);
+    if (remoteAt < localAt) {
+      localView.places = mergedPlaces;
+      state.showMemory[id] = localView;
+      return "local";
+    }
     var parsed = readShowView(incoming, id);
     var episodeChanged = parsed.episodeId !== localView.episodeId;
     localView.episodeId = parsed.episodeId;
     localView.moduleId = parsed.moduleId;
     localView.mode = parsed.mode;
     localView.viewUpdatedAt = remoteAt;
+    localView.places = mergedPlaces;
     if (episodeChanged) {
       localView.index = 0;
       localView.revealed = false;
@@ -1428,6 +1441,7 @@
       localView.missedIds = [];
     }
     state.showMemory[id] = localView;
+    if (pushPlaces) return "local";
     return remoteAt > localAt ? "remote" : "tie";
   }
 
@@ -1495,6 +1509,7 @@
       } else if (localAvatarAt > remoteAvatarAt) dirty = true;
     }
     rememberCurrentShow();
+    if (state.layer === "study" && state.mode !== "quiz") applyStudyPlace(false);
     if (remote.review && typeof remote.review === "object") {
       var remoteReviewAt = Number(remote.review.updatedAt);
       if (!isFinite(remoteReviewAt) || remoteReviewAt < 0) remoteReviewAt = 0;
@@ -1746,6 +1761,117 @@
     return Math.min(Math.max(0, state.index), list.length - 1);
   }
 
+  function readPlaces(raw) {
+    var out = {};
+    if (!raw || typeof raw !== "object") return out;
+    Object.keys(raw).forEach(function (key) {
+      if (!/^s\d{2}e\d{2}\|(3000|cet4)\|(preview|cover|quiz)$/.test(key)) return;
+      var row = raw[key];
+      if (!row || typeof row !== "object") return;
+      if (typeof row.id !== "string" || !/^[a-z0-9]+$/.test(row.id)) return;
+      var index = Number(row.index);
+      if (!isFinite(index) || index < 0) index = 0;
+      var updatedAt = Number(row.updatedAt);
+      if (!isFinite(updatedAt) || updatedAt < 0) updatedAt = 0;
+      out[key] = { id: row.id, index: Math.floor(index), updatedAt: Math.floor(updatedAt) };
+    });
+    return out;
+  }
+
+  function mergePlaceMaps(localPlaces, remotePlaces) {
+    var out = readPlaces(localPlaces);
+    var incoming = readPlaces(remotePlaces);
+    Object.keys(incoming).forEach(function (key) {
+      var row = incoming[key];
+      var prev = out[key];
+      if (!prev || row.updatedAt >= prev.updatedAt) out[key] = row;
+    });
+    return out;
+  }
+
+  function placesNeedPush(localPlaces, remotePlaces) {
+    var local = readPlaces(localPlaces);
+    var remote = readPlaces(remotePlaces);
+    return Object.keys(local).some(function (key) {
+      return !remote[key] || local[key].updatedAt > remote[key].updatedAt;
+    });
+  }
+
+  function placeKey(epId, moduleId, mode) {
+    return epId + "|" + (moduleId === "cet4" ? "cet4" : "3000") + "|" + mode;
+  }
+
+  function savedPlace(epId, moduleId, mode) {
+    var view = state.showMemory[state.showId];
+    if (!view || !view.places) return null;
+    return view.places[placeKey(epId, moduleId, mode)] || null;
+  }
+
+  function writePlace(wordId, index) {
+    if (!wordId || !/^[a-z0-9]+$/.test(wordId)) return;
+    if (!/^s\d{2}e\d{2}$/.test(state.episodeId || "")) return;
+    if (state.mode !== "preview" && state.mode !== "cover" && state.mode !== "quiz") return;
+    var view = state.showMemory[state.showId] || blankShowView();
+    if (!view.places) view.places = {};
+    view.places[placeKey(state.episodeId, state.moduleId, state.mode)] = {
+      id: wordId,
+      index: Math.max(0, Math.floor(index) || 0),
+      updatedAt: Date.now()
+    };
+    state.showMemory[state.showId] = view;
+  }
+
+  function rememberPlace() {
+    if (state.layer !== "study" && state.layer !== "list") return;
+    var ep = episode();
+    if (!ep) return;
+    if (state.mode === "quiz") {
+      var order = state.quizOrder || [];
+      if (!order.length || state.quizEp !== ep.id || state.quizModule !== state.moduleId) return;
+      var pos = state.quizPos || 0;
+      if (pos >= order.length) pos = order.length - 1;
+      if (pos < 0) pos = 0;
+      writePlace(order[pos], pos);
+      return;
+    }
+    var list = studyList(ep);
+    if (!list.length) return;
+    var at = safeIndex(list);
+    if (!list[at]) return;
+    writePlace(list[at].id, at);
+  }
+
+  function applyStudyPlace(resetIfMissing) {
+    if (state.mode === "quiz") return;
+    var ep = episode();
+    var list = ep ? studyList(ep) : [];
+    if (!list.length) {
+      state.index = 0;
+      return;
+    }
+    var saved = savedPlace(state.episodeId, state.moduleId, state.mode);
+    if (!saved) {
+      state.index = resetIfMissing ? 0 : Math.min(Math.max(0, state.index), list.length - 1);
+      return;
+    }
+    var found = -1;
+    list.forEach(function (item, i) { if (item.id === saved.id) found = i; });
+    if (found >= 0) state.index = found;
+    else state.index = Math.min(saved.index, list.length - 1);
+  }
+
+  function positionQuiz(saved) {
+    var order = state.quizOrder || [];
+    if (!order.length) {
+      state.quizPos = 0;
+      return;
+    }
+    if (!saved) return;
+    var at = order.indexOf(saved.id);
+    if (at >= 0) state.quizPos = at;
+    else state.quizPos = Math.min(saved.index, order.length - 1);
+  }
+
   function shuffle(ids) {
     var next = ids.slice();
     for (var i = next.length - 1; i > 0; i--) {
@@ -1984,22 +2110,29 @@
     if (next < 0 || next >= list.length) return;
     state.index = next;
     state.revealed = false;
+    rememberPlace();
     save();
     render();
   }
 
-  function startQuiz() {
+  function startQuiz(forceNew) {
     var ep = episode();
     if (!ep) return;
-    state.quizOrder = shuffle(knownItems(ep).map(function (item) { return item.id; }));
-    state.quizEp = ep.id;
-    state.quizModule = state.moduleId;
-    state.quizPos = 0;
-    state.hits = 0;
-    state.misses = 0;
-    state.missedIds = [];
+    var saved = forceNew ? null : savedPlace(ep.id, state.moduleId, "quiz");
+    var same = !forceNew && state.quizEp === ep.id && state.quizModule === state.moduleId && state.quizOrder && state.quizOrder.length;
+    if (!same) {
+      state.quizOrder = shuffle(knownItems(ep).map(function (item) { return item.id; }));
+      state.quizEp = ep.id;
+      state.quizModule = state.moduleId;
+      state.quizPos = 0;
+      state.hits = 0;
+      state.misses = 0;
+      state.missedIds = [];
+    }
+    if (saved) positionQuiz(saved);
     state.revealed = false;
     state.mode = "quiz";
+    rememberPlace();
     touchView();
     save();
     render();
@@ -2020,6 +2153,7 @@
     }
     state.quizPos += 1;
     state.revealed = false;
+    rememberPlace();
     save();
     render();
   }
@@ -2086,15 +2220,28 @@
     }
     if (action === "daily-check") { gradeDailyType(); return; }
     if (action === "daily-next") { dailyNext(); return; }
-    if (action === "back-episodes") { state.layer = "episodes"; render(); return; }
+    if (action === "back-episodes") {
+      rememberPlace();
+      state.layer = "episodes";
+      save();
+      render();
+      return;
+    }
     if (action === "back-study") { state.layer = "study"; render(); return; }
     if (action === "back-account") {
       state.layer = state.returnLayer || (readPlacement() ? "study" : "shows");
       render();
       return;
     }
-    if (action === "open-list") { state.layer = "list"; render(); return; }
+    if (action === "open-list") {
+      rememberPlace();
+      state.layer = "list";
+      save();
+      render();
+      return;
+    }
     if (action === "open-account") {
+      rememberPlace();
       state.returnLayer = state.layer;
       state.layer = "account";
       render();
@@ -2111,12 +2258,12 @@
       var nextEp = state.pendingEpisode || state.episodeId;
       if (!knownEpisode(nextEp, state.showId)) return;
       state.episodeId = nextEp;
-      state.index = 0;
       state.revealed = false;
       state.mode = "preview";
       state.quizOrder = [];
       state.quizPos = 0;
       state.layer = "study";
+      applyStudyPlace(true);
       touchView();
       save();
       render();
@@ -2161,6 +2308,7 @@
       return;
     }
     if (action === "open-profile") {
+      rememberPlace();
       state.returnLayer = state.layer === "profile" ? (state.returnLayer || "shows") : state.layer;
       state.layer = "profile";
       render();
@@ -2191,6 +2339,7 @@
       var jumpEp = node.getAttribute("data-episode");
       var jumpId = node.getAttribute("data-id");
       if (SHOW_IDS.indexOf(jumpShow) === -1 || !knownEpisode(jumpEp, jumpShow) || !jumpId) return;
+      rememberPlace();
       rememberCurrentShow();
       state.showId = jumpShow;
       copyViewOnto(state);
@@ -2205,6 +2354,7 @@
       jumpList.forEach(function (item, i) { if (item.id === jumpId) jumpAt = i; });
       state.index = jumpAt;
       state.revealed = false;
+      rememberPlace();
       state.pendingShow = jumpShow;
       state.pendingEpisode = jumpEp;
       touchView();
@@ -2249,10 +2399,11 @@
     if (action === "module") {
       var moduleId = node.getAttribute("data-module");
       if (moduleId !== "3000" && moduleId !== "cet4") return;
+      rememberPlace();
       state.moduleId = moduleId;
-      state.index = 0;
       state.revealed = false;
       state.mode = "preview";
+      if (state.layer === "study" || state.layer === "list") applyStudyPlace(true);
       touchView();
       save();
       render();
@@ -2260,11 +2411,14 @@
     }
     if (action === "mode") {
       var mode = node.getAttribute("data-mode");
-      if (mode === "quiz") startQuiz();
-      else if (mode === "preview" || mode === "cover") {
-        if (state.mode !== mode) state.index = 0;
+      if (mode === "quiz") {
+        rememberPlace();
+        startQuiz();
+      } else if (mode === "preview" || mode === "cover") {
+        rememberPlace();
         state.mode = mode;
         state.revealed = false;
+        applyStudyPlace(true);
         touchView();
         save();
         render();
@@ -2301,6 +2455,7 @@
         state.index = at + 1;
       }
       state.revealed = false;
+      rememberPlace();
       save();
       render();
       return;
@@ -2311,6 +2466,7 @@
       var wordId = node.getAttribute("data-id");
       var epJump = episode();
       if (!epJump || !wordId) return;
+      rememberPlace();
       state.mode = statusOf(epJump.id, wordId) === "known" ? "cover" : "preview";
       var study = studyList(epJump);
       var at = 0;
@@ -2319,6 +2475,7 @@
       state.revealed = false;
       state.layer = "study";
       state.scrollCard = true;
+      rememberPlace();
       save();
       render();
       return;
@@ -2327,10 +2484,12 @@
       grade(node.getAttribute("data-ok") === "1", node.getAttribute("data-id"));
       return;
     }
-    if (action === "quiz-restart") { startQuiz(); return; }
+    if (action === "quiz-restart") { startQuiz(true); return; }
     if (action === "quiz-back") {
+      rememberPlace();
       state.mode = "preview";
       state.revealed = false;
+      applyStudyPlace(true);
       touchView();
       save();
       render();
@@ -2341,10 +2500,12 @@
     if (event.target.id !== "episode") return;
     var nextId = event.target.value;
     if (!knownEpisode(nextId, state.showId)) return;
+    rememberPlace();
     state.episodeId = nextId;
-    state.index = 0;
     state.revealed = false;
     state.mode = "preview";
+    state.layer = "study";
+    applyStudyPlace(true);
     touchView();
     save();
     render();
@@ -4191,8 +4352,18 @@
   if (cloudOn() && !state.welcomePreview) pull(true);
   document.addEventListener("visibilitychange", function () {
     if (state.welcomePreview) return;
+    if (document.visibilityState === "hidden") {
+      rememberPlace();
+      save();
+      return;
+    }
     if (!cloudOn() || !syncReady) return;
     if (document.visibilityState === "visible") pull(false);
+  });
+  window.addEventListener("pagehide", function () {
+    if (state.welcomePreview) return;
+    rememberPlace();
+    persistLocal();
   });
   setInterval(function () {
     if (state.welcomePreview || !cloudOn() || !syncReady || document.visibilityState === "hidden") return;

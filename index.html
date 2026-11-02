@@ -216,6 +216,7 @@
     margin-top: 2px;
     padding: 6px 10px;
   }
+  .speak-hint { margin: 6px 0 0; font-size: 0.85rem; line-height: 1.35; color: var(--fuzzy); }
   ol.senses { margin: 6px 0 0; padding-left: 1.3em; color: var(--ink); }
   ol.senses li { margin: 4px 0 0; overflow-wrap: anywhere; }
   .pool-tabs { margin-top: var(--stack); }
@@ -1943,56 +1944,106 @@
     "en-GB": ["Daniel", "Kate", "Serena", "Google UK English Female", "Google UK English Male"]
   };
 
+  function voiceLang(voice) {
+    return String(voice && voice.lang || "").replace("_", "-").toLowerCase();
+  }
+
+  function voiceReady(voice) {
+    if (!voice || voice.localService === false) return false;
+    if (VOICE_SKIP.test(voice.name || "")) return false;
+    return true;
+  }
+
   function clearVoice(pref) {
     var voices = speechSynthesis.getVoices() || [];
-    var pool = voices.filter(function (voice) {
-      var lang = String(voice.lang || "").replace("_", "-");
-      return lang.indexOf(pref) === 0 && !VOICE_SKIP.test(voice.name || "");
-    });
-    var names = VOICE_RANK[pref] || [];
-    var i;
-    var j;
-    for (i = 0; i < names.length; i++) {
-      for (j = 0; j < pool.length; j++) {
-        if (pool[j].name.indexOf(names[i]) !== -1 && !/compact/i.test(pool[j].name)) return pool[j];
-      }
+    var want = String(pref || "en-US").toLowerCase();
+    function poolFor(prefix, allowCompact) {
+      return voices.filter(function (voice) {
+        if (!voiceReady(voice)) return false;
+        if (voiceLang(voice).indexOf(prefix) !== 0) return false;
+        if (!allowCompact && /compact/i.test(voice.name || "")) return false;
+        return true;
+      });
     }
-    var enhanced = pool.filter(function (voice) {
-      return /enhanced|premium|siri/i.test(voice.name || "") && !/compact/i.test(voice.name || "");
-    });
-    if (enhanced.length) return enhanced[0];
-    var local = pool.filter(function (voice) {
-      return voice.localService && !/compact/i.test(voice.name || "");
-    });
-    if (local.length) return local[0];
-    return pool[0] || null;
+    function named(pool) {
+      var names = VOICE_RANK[pref] || [];
+      var i;
+      var j;
+      for (i = 0; i < names.length; i++) {
+        for (j = 0; j < pool.length; j++) {
+          if (pool[j].name.indexOf(names[i]) !== -1) return pool[j];
+        }
+      }
+      return null;
+    }
+    var exact = poolFor(want, false);
+    var picked = named(exact) || exact[0];
+    if (picked) return picked;
+    var compact = poolFor(want, true);
+    picked = named(compact) || compact[0];
+    if (picked) return picked;
+    var english = poolFor("en", true);
+    return named(english) || english[0] || null;
+  }
+
+  function iosSpeech() {
+    var ua = navigator.userAgent || "";
+    return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  }
+
+  function speakFail(message) {
+    var old = document.getElementById("speak-hint");
+    if (old) old.remove();
+    var dock = document.querySelector(".confirm-dock");
+    if (!dock) return;
+    var hint = h("p", { id: "speak-hint", class: "speak-hint", text: message });
+    dock.appendChild(hint);
+    window.setTimeout(function () {
+      if (hint.parentNode) hint.remove();
+    }, 4200);
   }
 
   function speakWord(text) {
     var line = String(text || "").trim();
-    if (!line || !window.speechSynthesis || typeof SpeechSynthesisUtterance !== "function") return;
-    function say() {
+    if (!line) return;
+    if (!window.speechSynthesis || typeof SpeechSynthesisUtterance !== "function") {
+      speakFail("这个浏览器不能发音。请用 Safari 或 Chrome 打开。");
+      return;
+    }
+    var british = state.showId === "det" || state.showId === "ado";
+    var pref = british ? "en-GB" : "en-US";
+    function play(useVoice) {
+      var voice = useVoice ? clearVoice(pref) : null;
       var utter = new SpeechSynthesisUtterance(line);
-      var british = state.showId === "det" || state.showId === "ado";
-      var pref = british ? "en-GB" : "en-US";
-      var voice = clearVoice(pref);
       utter.lang = voice && voice.lang ? String(voice.lang).replace("_", "-") : pref;
       utter.rate = 0.92;
       utter.pitch = 1;
+      utter.volume = 1;
       if (voice) utter.voice = voice;
-      speechSynthesis.cancel();
-      window.setTimeout(function () { speechSynthesis.speak(utter); }, 80);
-    }
-    if (!(speechSynthesis.getVoices() || []).length) {
-      var once = function () {
-        speechSynthesis.removeEventListener("voiceschanged", once);
-        say();
+      utter.onerror = function (event) {
+        var reason = event && event.error;
+        if (reason === "interrupted" || reason === "canceled") return;
+        if (useVoice) {
+          play(false);
+          return;
+        }
+        speakFail("没有播出声音。看看静音开关，或换 Safari / Chrome。");
       };
-      speechSynthesis.addEventListener("voiceschanged", once);
-      speechSynthesis.getVoices();
+      try {
+        if (speechSynthesis.paused) speechSynthesis.resume();
+        speechSynthesis.speak(utter);
+        if (speechSynthesis.paused) speechSynthesis.resume();
+      } catch (err) {
+        speakFail("这个浏览器不能发音。请用 Safari 或 Chrome 打开。");
+      }
+    }
+    // iPhone 必须在这次点击里立刻读。推迟到计时器里，系统会直接丢掉。
+    if (iosSpeech()) {
+      play(true);
       return;
     }
-    say();
+    speechSynthesis.cancel();
+    window.setTimeout(function () { play(true); }, 60);
   }
 
   function speakButton(text) {
@@ -4382,6 +4433,21 @@
   if (state.needsMigrate) {
     delete state.needsMigrate;
     persistLocal();
+  }
+  if (window.speechSynthesis) {
+    speechSynthesis.getVoices();
+    speechSynthesis.addEventListener("voiceschanged", function () {
+      speechSynthesis.getVoices();
+    });
+    document.addEventListener("pointerdown", function () {
+      speechSynthesis.getVoices();
+      if (speechSynthesis.paused) speechSynthesis.resume();
+    }, { passive: true });
+    window.setInterval(function () {
+      if (!speechSynthesis.speaking || speechSynthesis.paused) return;
+      speechSynthesis.pause();
+      speechSynthesis.resume();
+    }, 10000);
   }
   app.addEventListener("click", onClick);
   app.addEventListener("input", function (event) {
